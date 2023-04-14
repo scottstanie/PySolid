@@ -174,32 +174,22 @@
    99 end
 
 *-----------------------------------------------------------------------
-      subroutine solid_point(glad,glod,iyr,imo,idy,step_sec)
-
-*** calculate SET at given location for one day with step_sec seconds resolution
-*** Arguments: glad/glod   - float, latitude/longitude in deg
-***            iyr/imo/idy - int, start date/time in UTC
-***            step_sec    - int, time step in seconds
-*** Returns:   seconds,  SET_east,  SET_north,  SET_up
+      subroutine solid_point(glad,glod,iyr,imo,idy,nloop, output)
 
       implicit double precision(a-h,o-z)
       dimension rsun(3),rmoon(3),etide(3),xsta(3)
-      double precision glad,glod
-      integer iyr,imo,idy
-      integer nloop, step_sec
+      double precision, intent(in) :: glad,glod
+      double precision lon
+      integer, intent(in) :: iyr,imo,idy,nloop
       double precision tdel2
+      real(8), intent(out), dimension(nloop,4) :: output
+! f2py intent(in) glad,glod,iyr,imo,idy,nloop
+! f2py intent(out) output
+
       !*** leap second table limit flag
       logical lflag
       common/stuff/rad,pi,pi2
       common/comgrs/a,e2
-
-*** open output file
-
-      lout=1
-      open(lout,file='solid.txt',form='formatted',status='unknown')
-      write(lout,'(a)') '# program solid -- UTC version -- 2018jun01'
-
-*** constants
 
       pi=4.d0*datan(1.d0)
       pi2=pi+pi
@@ -213,42 +203,45 @@
 *** check inputs section
 
       if(glad.lt.-90.d0.or.glad.gt.90.d0) then
-        write(lout,'(a,G0.9)') 'ERROR: lat NOT in [-90,+90]:',glad
-        go to 98
+        print *, 'ERROR: lat NOT in [-90,+90]:',glad
+        return
       endif
 
       if(glod.lt.-360.d0.or.glod.gt.360.d0) then
-        write(lout,'(a,G0.9)') 'ERROR: lon NOT in [-360,+360]:',glod
-        go to 98
+        print *, 'ERROR: lon NOT in [-360,+360]:',glod
+        return
       endif
 
       if(iyr.lt.1901.or.iyr.gt.2099) then
-        write(lout,'(a,i5)') 'ERROR: year NOT in [1901-2099]:',iyr
-        go to 98
+        print *, 'ERROR: year NOT in [1901-2099]:',iyr
+        return
       endif
 
       if(imo.lt.1.or.imo.gt.12) then
-        write(lout,'(a,i3)') 'ERROR: month NOT in [1-12]:',imo
-        go to 98
+        print *, 'ERROR: month NOT in [1-12]:',imo
+        return
       endif
 
       if(idy.lt.1.or.idy.gt.31) then
-        write(lout,'(a,i3)') 'ERROR: day NOT in [1-31]:',idy
-        go to 98
+        print *, 'ERROR: day NOT in [1-31]:',idy
+        return
       endif
-
-*** output header
-
-      write(lout,'(a,i5,2i3)') '# year, month, day =',iyr,imo,idy
-      write(lout,'(a,2f15.9)') '# lat, lon =',glad,glod
 
 *** position of observing point (positive East)
 
-      if(glod.lt.  0.d0) glod=glod+360.d0
-      if(glod.ge.360.d0) glod=glod-360.d0
+      if(glod.lt.  0.d0) then
+            lon = glod + 360.d0
+      else
+            lon = glod
+      endif
+      if(glod.ge.360.d0) then
+            lon = glod - 360.d0
+      else
+            lon = glod
+      endif
 
       gla0=glad/rad
-      glo0=glod/rad
+      glo0=lon/rad
       eht0=0.d0
       call geoxyz(gla0,glo0,eht0,x0,y0,z0)
       xsta(1)=x0
@@ -267,54 +260,44 @@
       call setjd0(iyr,imo,idy)
 
 *** loop over time
-
-      !*** tdel2=1.d0/60.d0/24.d0
-      !*** do iloop=0,60*24
-      nloop=60*60*24/step_sec
-      tdel2=1.d0/DFLOAT(nloop)
+      !*** tdel2=1.d0/DFLOAT(nloop)
       do iloop=0,nloop
-        !*** false means flag not raised
-        !*** mjd/fmjd in UTC
-        !*** mjd/fmjd in UTC
-        !*** mjd/fmjd in UTC
-        lflag=.false.
-        call sunxyz (mjd,fmjd,rsun,lflag)
-        call moonxyz(mjd,fmjd,rmoon,lflag)
-        call detide (xsta,mjd,fmjd,rsun,rmoon,etide,lflag)
-        xt = etide(1)
-        yt = etide(2)
-        zt = etide(3)
-
+            !*** false means flag not raised
+            !*** mjd/fmjd in UTC
+            !*** mjd/fmjd in UTC
+            !*** mjd/fmjd in UTC
+            lflag=.false.
+            call sunxyz (mjd,fmjd,rsun,lflag)
+            call moonxyz(mjd,fmjd,rmoon,lflag)
+            call detide (xsta,mjd,fmjd,rsun,rmoon,etide,lflag)
+            xt = etide(1)
+            yt = etide(2)
+            zt = etide(3)
 *** determine local geodetic horizon components (topocentric)
+            !*** tide vector
+            call rge(gla0,glo0,ut,vt,wt,xt,   yt,   zt)
 
-        !*** tide vector
-        call rge(gla0,glo0,ut,vt,wt,xt,   yt,   zt)
+            call mjdciv(mjd,fmjd,iyr,imo,idy,ihr,imn,sec)
 
-        call mjdciv(mjd,fmjd,iyr,imo,idy,ihr,imn,sec)
+            !*** store output in the output variable
+            tsec=ihr*3600.d0+imn*60.d0+sec
+            output(iloop+1,:) = [tsec,vt,ut,wt]
 
-        !*** write output to file
-        tsec=ihr*3600.d0+imn*60.d0+sec
-        write(lout,'((f8.1,:,",  "),*(f10.6,:,",  "))') tsec,vt,ut,wt
-
-        !*** update fmjd for the next round
-        fmjd=fmjd+tdel2
-        !*** force 1 sec. granularity
-        fmjd=(idnint(fmjd*86400.d0))/86400.d0
+            !*** update fmjd for the next round
+            fmjd=fmjd+tdel2
+            !*** force 1 sec. granularity
+            fmjd=(idnint(fmjd*86400.d0))/86400.d0
       enddo
-
 *** end of processing and flag of leap second
 
       if(lflag) then
         write(*,'(a)') 'Mild Warning -- time crossed leap second table'
         write(*,'(a)') '  boundaries.  Boundary edge value used instead'
       endif
-      close(lout)
-
-      go to 99
-   98 write(*,'(a)') 'Check arguments.'
-
+  
       return
-   99 end
+      end
+     
 
 *@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
       subroutine detide(xsta,mjd,fmjd,xsun,xmon,dxtide,lflag)
