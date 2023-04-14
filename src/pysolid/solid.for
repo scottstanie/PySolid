@@ -9,26 +9,37 @@
 ***     wget -r -l1 --no-parent -R "index.html*" -nH --cut-dirs=3 https://iers-conventions.obspm.fr/content/chapter7/software/dehanttideinel
 *** Z. Yunjun and S. Sangha, Sep 2020: modify solid() to solid_point/grid() as subroutines.
 
-      subroutine solid_grid(iyr,imo,idy,ihh,imm,iss,
-     * glad0,steplat,nlat,
-     * glod0,steplon,nlon)
+      subroutine solid_grid(iyr,imo,idy,ihh,imm,iss, latgrid, longrid, nlat, nlon, out)
 
 *** calculate solid earth tides (SET) for one spatial grid given the date/time
 *** Arguments: iyr/imo/idy/ihh/imm/iss - int, date/time for YYYY/MM/DD/HH/MM/SS
-***            glad0/glad1/steplat     - float, north(Y_FIRST)/south/step(negative) in deg
-***            glod0/glod1/steplon     - float, west(X_FIRST) /east /step(positive) in deg
+***            latgrid - 1D array, latitude grid
+***            longrid - 1D array, longitude grid
 *** Returns:   latitude,  longitude,  SET_east,  SET_north,  SET_up
 
-      implicit double precision(a-h,o-z)
-      dimension rsun(3),rmoon(3),etide(3),xsta(3)
+      implicit none 
+      ! implicit double precision(a-h,o-z)
+      real(8), dimension (3) ::  rsun,rmoon,etide,xsta
       integer iyr,imo,idy,ihh,imm,iss
       integer nlat,nlon
-      double precision glad0,steplat
-      double precision glod0,steplon
+      real(8), intent(in), dimension(nlat) :: latgrid
+      real(8) ,intent(in), dimension(nlon) :: longrid
       !***^ leap second table limit flag
       logical lflag
-      common/stuff/rad,pi,pi2
-      common/comgrs/a,e2
+      ! common/stuff/rad,pi,pi2
+      ! common/comgrs/a,e2
+      real (8) :: a,e2,rad,pi,pi2
+      real(8) :: glad0,glod0,glad1,glod1
+      real(8) :: steplat,steplon
+      integer :: ilat,ilon
+      real(8) :: glad,glod
+      ! lout for flag
+      integer :: lout
+      real(8), dimension(nlat,nlon,3) :: out
+      !f2py intent(in) :: iyr,imo,idy,ihh,imm,iss
+      !f2py intent(hide),depend(latgrid) :: nlat=size(latgrid)
+      !f2py intent(hide),depend(longrid) :: nlon=size(longrid)
+      !f2py intent(out) :: out(nlat,nlon,3)
 
 *** open output file
 
@@ -105,8 +116,10 @@
       do ilat=0,nlat
         do ilon=0,nlon
 
-        glad=glad0+ilat*steplat
-        glod=glod0+ilon*steplon
+      !   glad=glad0+ilat*steplat
+      !   glod=glod0+ilon*steplon
+      glad = latgrid(ilat)
+      glod = longrid(ilon)
 
 *** position of observing point (positive East)
 
@@ -155,6 +168,9 @@
 
         !*** write output to file
         write(lout,'(*(G0.9,:,",  "))') glad,glod,vt,ut,wt
+        out(ilat+1,ilon+1,1)=vt
+        out(ilat+1,ilon+1,2)=ut
+        out(ilat+1,ilon+1,3)=wt
 
         enddo
       enddo
@@ -174,20 +190,24 @@
    99 end
 
 *-----------------------------------------------------------------------
-      subroutine solid_point(glad,glod,iyr,imo,idy,step_sec)
+      subroutine solid_point(txt_file,glad,glod,iyr,imo,idy,nloop, output)
 
 *** calculate SET at given location for one day with step_sec seconds resolution
-*** Arguments: glad/glod   - float, latitude/longitude in deg
+*** Arguments: txt_file    - string, output file name
+***            glad/glod   - float, latitude/longitude in deg
 ***            iyr/imo/idy - int, start date/time in UTC
 ***            step_sec    - int, time step in seconds
 *** Returns:   seconds,  SET_east,  SET_north,  SET_up
 
       implicit double precision(a-h,o-z)
       dimension rsun(3),rmoon(3),etide(3),xsta(3)
-      double precision glad,glod
-      integer iyr,imo,idy
-      integer nloop, step_sec
+      double precision, intent(in) :: glad,glod
+      double precision lon
+      integer, intent(in) :: iyr,imo,idy,nloop
       double precision tdel2
+      real(8), intent(out), dimension(nloop,4) :: output
+! f2py intent(in) glad,glod,iyr,imo,idy,nloop
+! f2py intent(out) output
       !*** leap second table limit flag
       logical lflag
       common/stuff/rad,pi,pi2
@@ -198,7 +218,6 @@
       lout=1
       open(lout,file='solid.txt',form='formatted',status='unknown')
       write(lout,'(a)') '# program solid -- UTC version -- 2018jun01'
-
 *** constants
 
       pi=4.d0*datan(1.d0)
@@ -244,11 +263,22 @@
 
 *** position of observing point (positive East)
 
-      if(glod.lt.  0.d0) glod=glod+360.d0
-      if(glod.ge.360.d0) glod=glod-360.d0
+      ! if(glod.lt.  0.d0) glod=glod+360.d0
+      ! if(glod.ge.360.d0) glod=glod-360.d0
+      if(glod.lt.  0.d0) then
+            lon = glod + 360.d0
+      else
+            lon = glod
+      endif
+      if(glod.ge.360.d0) then
+            lon = glod - 360.d0
+      else
+            lon = glod
+      endif
+
 
       gla0=glad/rad
-      glo0=glod/rad
+      glo0=lon/rad
       eht0=0.d0
       call geoxyz(gla0,glo0,eht0,x0,y0,z0)
       xsta(1)=x0
@@ -270,7 +300,7 @@
 
       !*** tdel2=1.d0/60.d0/24.d0
       !*** do iloop=0,60*24
-      nloop=60*60*24/step_sec
+      ! nloop=60*60*24/step_sec
       tdel2=1.d0/DFLOAT(nloop)
       do iloop=0,nloop
         !*** false means flag not raised
@@ -295,6 +325,7 @@
         !*** write output to file
         tsec=ihr*3600.d0+imn*60.d0+sec
         write(lout,'((f8.1,:,",  "),*(f10.6,:,",  "))') tsec,vt,ut,wt
+        output(iloop+1,:) = [tsec,vt,ut,wt]
 
         !*** update fmjd for the next round
         fmjd=fmjd+tdel2

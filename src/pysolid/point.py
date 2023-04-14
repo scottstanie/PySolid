@@ -14,11 +14,14 @@
 import collections
 import datetime as dt
 import os
+import tempfile
+from typing import Tuple
 
 import numpy as np
-from matplotlib import pyplot as plt, ticker, dates as mdates
+from matplotlib import dates as mdates
+from matplotlib import pyplot as plt
+from matplotlib import ticker
 from scipy import signal
-
 
 ## Tidal constituents
 # https://en.wikipedia.org/wiki/Theory_of_tides#Tidal_constituents. Accessed on: 2022-03-07.
@@ -73,7 +76,11 @@ TIDES = (
 
 
 ##################################  Earth tides - point mode  ##################################
-def calc_solid_earth_tides_point(lat, lon, dt0, dt1, step_sec=60, display=False, verbose=True):
+# def calc_solid_earth_tides_point(lat, lon, dt0, dt1, step_sec=60, display=False, verbose=True):
+def calc_solid_earth_tides_point(lat: float, lon: float, dt0: dt.datetime,
+                                 dt1: dt.datetime, step_sec: int = 60,
+                                 display: bool = False, verbose: bool=True
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Calculate SET in east/north/up direction for the given time period at the given point (lat/lon).
 
     Parameters: lat/lon  - float32, latitude/longitude of the point of interest
@@ -145,7 +152,8 @@ def calc_solid_earth_tides_point(lat, lon, dt0, dt1, step_sec=60, display=False,
     return dt_out, tide_e, tide_n, tide_u
 
 
-def calc_solid_earth_tides_point_per_day(lat, lon, date_str, step_sec=60):
+def calc_solid_earth_tides_point_per_day(lat: float, lon: float
+, date_str: str, step_sec: int=60):
     """Calculate solid Earth tides (SET) in east/north/up direction
     for one day at the given point (lat/lon).
 
@@ -170,17 +178,17 @@ def calc_solid_earth_tides_point_per_day(lat, lon, date_str, step_sec=60):
         raise ImportError(msg)
 
     ## calc solid Earth tides and write to text file
-    txt_file = os.path.abspath('solid.txt')
-    if os.path.isfile(txt_file):
-        os.remove(txt_file)
+    fp = tempfile.NamedTemporaryFile(mode='w', delete=False)
+    txt_file = fp.name
 
     # Run twice to circumvent fortran bug which cuts off last file in loop - Simran, Jun 2020
     t = dt.datetime.strptime(date_str, '%Y%m%d')
+    num_row = int(24 * 60 * 60 / step_sec)
     for _ in range(2):
-        solid_point(lat, lon, t.year, t.month, t.day, step_sec)
+        # solid_point(lat, lon, t.year, t.month, t.day, step_sec)
+        solid_point(txt_file, lat, lon, t.year, t.month, t.day, num_row)
 
     ## read data from text file
-    num_row = int(24 * 60 * 60 / step_sec)
     fc = np.loadtxt(txt_file,
                     dtype=float,
                     delimiter=',',
@@ -196,7 +204,7 @@ def calc_solid_earth_tides_point_per_day(lat, lon, date_str, step_sec=60):
     dt_out = np.array(dt_out)
 
     # remove the temporary text file
-    os.remove(txt_file)
+    fp.close()
 
     return dt_out, tide_e, tide_n, tide_u
 
