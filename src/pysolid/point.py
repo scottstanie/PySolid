@@ -171,17 +171,12 @@ def calc_solid_earth_tides_point_per_day(lat, lon, date_str, step_sec=60):
 
     # Run twice to circumvent fortran bug which cuts off last file in loop - Simran, Jun 2020
     t = dt.datetime.strptime(date_str, '%Y%m%d')
-    
-    for _ in range(2):
-        fc = solid_point(lat, lon, t.year, t.month, t.day, step_sec)
 
-    ## read data from text file
-    # num_row = int(24 * 60 * 60 / step_sec)
-    # fc = np.loadtxt(txt_file,
-    #                 dtype=float,
-    #                 delimiter=',',
-    #                 skiprows=0,
-    #                 max_rows=num_row)
+    for _ in range(2):
+        # fc = solid_point(lat, lon, t.year, t.month, t.day, step_sec)
+        nloop=int(60*60*24/step_sec)
+        fc = solid_point(lat, lon, t.year, t.month, t.day, nloop)
+
 
     tide_e = fc[:, 1].flatten()
     tide_n = fc[:, 2].flatten()

@@ -260,8 +260,8 @@
       call setjd0(iyr,imo,idy)
 
 *** loop over time
-      !*** tdel2=1.d0/DFLOAT(nloop)
-      do iloop=0,nloop
+      tdel2=1.d0/DFLOAT(nloop)
+      do iloop=1,nloop
             !*** false means flag not raised
             !*** mjd/fmjd in UTC
             !*** mjd/fmjd in UTC
@@ -281,7 +281,7 @@
 
             !*** store output in the output variable
             tsec=ihr*3600.d0+imn*60.d0+sec
-            output(iloop+1,:) = [tsec,vt,ut,wt]
+            output(iloop,:) = [tsec,vt,ut,wt]
 
             !*** update fmjd for the next round
             fmjd=fmjd+tdel2
